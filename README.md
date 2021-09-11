@@ -1,0 +1,2 @@
+# ReminderBot
+Discord bot "ReminderBot"
