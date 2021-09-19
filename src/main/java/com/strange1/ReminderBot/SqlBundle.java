@@ -1,7 +1,7 @@
 package com.strange1.ReminderBot;
+import java.util.Locale;
 
-public class SqlBundle
-{
+public class SqlBundle {
     long Id;
     String Channel;
     String Client;
@@ -11,8 +11,7 @@ public class SqlBundle
     long RepeatTime;
     String Status;
 
-    public SqlBundle(long id, String channel, String client, long time, String message, String object, long repeatTime, String status)
-    {
+    public SqlBundle(long id, String channel, String client, long time, String message, String object, long repeatTime, String status) {
         Id = id;
         Channel = channel;
         Client = client;
@@ -21,10 +20,11 @@ public class SqlBundle
         Object = object;
         RepeatTime = repeatTime;
         Status = status;
+        if (!Status.toLowerCase(Locale.ROOT).equals("test") && Id < 1000)
+            Id += 1000;
     }
 
-    public String getDataString()
-    {
+    public String getDataString() {
         return Id + " | " + Channel + " | " + Client + " | " + Time + " | " + Message + " | " + Object + " | " + RepeatTime + " | " + Status;
     }
 }

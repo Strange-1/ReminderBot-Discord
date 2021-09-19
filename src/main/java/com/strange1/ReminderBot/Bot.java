@@ -5,32 +5,38 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.events.ReadyEvent;
+import net.dv8tion.jda.api.events.ShutdownEvent;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import org.jetbrains.annotations.NotNull;
 
 import javax.security.auth.login.LoginException;
+import java.io.*;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Properties;
 
 public class Bot extends ListenerAdapter {
+    static Properties properties;
     static JDA jda;
-    protected static String TOKEN = "ODg2MTA4MDc1MTcyNDMzOTYx.YTwydA.40AGXCBDufCo4yeqHKETjl4v0ko";
+    protected static String TOKEN;
     private static Connection con;
 
-
-    public static void main(String[] args) throws LoginException, InterruptedException, SQLException {
+    public static void main(String[] args) throws LoginException, InterruptedException, SQLException, IOException {
+        properties = new Properties();
+        FileInputStream is = new FileInputStream("src/config/config.properties");
+        properties.load(is);
+        TOKEN = properties.getProperty("TOKEN");
 
         if (args.length > 0 && List.of(new String[]{"-t", "/t", "--test"}).contains(args[0])) {
-            System.out.println("Test Mode");
             doTest();
             if (!con.isClosed()) {
                 con.close();
                 System.out.println("Connection Closed");
             }
-            System.out.println("Test ended");
         } else
             Init();
     }
@@ -46,23 +52,23 @@ public class Bot extends ListenerAdapter {
                 .addCommands(new CommandData("ping", "Ping!"))
                 .addCommands(new CommandData("info", "show bot's information."))
                 .queue();
+        connectJDBC();
         jda.awaitReady();
 
         System.out.println("Hey ya!");
     }
 
     public static int connectJDBC() {
-        String ip = "192.168.1.16";
-        String port = "3306";
-        String db = "ReminderBot";
-        String user = "sqladmin";
-        String passwd = "268bcb7214";
+        String ip = properties.getProperty("ip");
+        String db = properties.getProperty("db");
+        String user = properties.getProperty("user");
+        String passwd = properties.getProperty("passwd");
         try {
-            String url = "jdbc:mariadb://" + ip + ":" + port + "/" + db;
+            String url = "jdbc:mariadb://" + ip + "/" + db;
             System.out.println("Connecting \"" + url + "\" by " + user + "...");
             con = DriverManager.getConnection(url, user, passwd);
             if (con.isValid(0)) {
-                System.out.println("===== Connection Established =====");
+                System.out.println("JDBC connection established");
                 return 0;
             }
         } catch (SQLException e) {
@@ -113,12 +119,6 @@ public class Bot extends ListenerAdapter {
     }
 
     @Override
-    public void onReady(@NotNull ReadyEvent event) {
-        //jda.getTextChannels().get(0).sendMessage("Hey ya!").queue();
-        super.onReady(event);
-    }
-
-    @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
         switch (event.getName()) {
             case "ping":
@@ -135,29 +135,50 @@ public class Bot extends ListenerAdapter {
     }
 
     protected static void doTest() {
+        long startTime = Calendar.getInstance().getTimeInMillis();
+        int errorCount = 0;
+        System.out.println("===== Test mode =====");
         try {
             if (connectJDBC() == 0) {
                 System.out.println("===== INSERT test =====");
-                if (writeSQL(new SqlBundle(1, "text_channel", "test_client", 1, "test_message", "test_object", 1, "Test")) == 0)
+                errorCount++;
+                if (writeSQL(new SqlBundle(1, "text_channel", "test_client", 1, "test_message", "test_object", 1, "Test")) == 0) {
                     System.out.println("INSERT test successful\n");
+                    errorCount--;
+                }
 
                 System.out.println("===== SELECT test(1) =====");
-                System.out.println(readSQL("select * from log where id=1").get(0).getDataString());
-                System.out.println("SELECT test successful\n");
+                errorCount++;
+                ArrayList<SqlBundle> bundles = readSQL("select * from log where id=1");
+                if (!bundles.isEmpty()) {
+                    System.out.println(bundles.get(0).getDataString());
+                    System.out.println("SELECT test successful\n");
+                    errorCount--;
+                }
 
                 System.out.println("===== DELETE test =====");
-                if (deleteSQL(1) == 0)
+                errorCount++;
+                if (deleteSQL(1) == 0) {
                     System.out.println("DELETE test successful\n");
+                    errorCount--;
+                }
 
                 System.out.println("===== SELECT test(2) =====");
-                if (readSQL("select * from log where id=1").isEmpty())
+                errorCount++;
+                if (readSQL("select * from log where id=1").isEmpty()) {
                     System.out.println("SELECT test successful\n");
+                    errorCount--;
+                }
             } else {
                 System.out.println("Connection Error");
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
+        long endTime = Calendar.getInstance().getTimeInMillis();
+        System.out.println("===== Test ended =====");
+        System.out.println("Error count: " + errorCount);
+        System.out.println("Test time: " + (endTime-startTime) + "ms");
     }
 }
 
