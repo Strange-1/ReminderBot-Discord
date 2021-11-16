@@ -1,184 +1,250 @@
 package com.strange1.ReminderBot;
 
-import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.JDABuilder;
-import net.dv8tion.jda.api.OnlineStatus;
-import net.dv8tion.jda.api.entities.Activity;
-import net.dv8tion.jda.api.events.ReadyEvent;
-import net.dv8tion.jda.api.events.ShutdownEvent;
+import net.dv8tion.jda.api.*;
+import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.OptionMapping;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.internal.utils.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import javax.security.auth.login.LoginException;
-import java.io.*;
+import java.awt.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
-import java.util.Properties;
+import java.text.DateFormat;
+import java.text.MessageFormat;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.util.*;
+import java.util.Date;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Bot extends ListenerAdapter {
     static Properties properties;
     static JDA jda;
     protected static String TOKEN;
     private static Connection con;
+    private static Timer scheduleTimer;
+    private static EmbedBuilder embedBuilder;
+    private static boolean isOnService = false;
+
+    String[] messages;
+    long sqlTime;
+    String sqlMessage;
 
     public static void main(String[] args) throws LoginException, InterruptedException, SQLException, IOException {
         properties = new Properties();
         FileInputStream is = new FileInputStream("src/config/config.properties");
         properties.load(is);
-        TOKEN = properties.getProperty("TOKEN");
-
-        if (args.length > 0 && List.of(new String[]{"-t", "/t", "--test"}).contains(args[0])) {
-            doTest();
-            if (!con.isClosed()) {
-                con.close();
-                System.out.println("Connection Closed");
-            }
-        } else
-            Init();
+        TOKEN = getProperty("TOKEN");
+        Init();
     }
 
     public static void Init() throws LoginException, InterruptedException {
-        JDABuilder builder = JDABuilder.createDefault(TOKEN);
-        builder.setAutoReconnect(true)
-                .setStatus(OnlineStatus.ONLINE)
-                .addEventListeners(new Bot())
-                .setActivity(Activity.playing("Type /ping"));
-        jda = builder.build();
-        jda.updateCommands()
-                .addCommands(new CommandData("ping", "Ping!"))
-                .addCommands(new CommandData("info", "show bot's information."))
-                .queue();
-        connectJDBC();
-        jda.awaitReady();
+        BuildJDA();
 
         System.out.println("Hey ya!");
     }
 
-    public static int connectJDBC() {
-        String ip = properties.getProperty("ip");
-        String db = properties.getProperty("db");
-        String user = properties.getProperty("user");
-        String passwd = properties.getProperty("passwd");
+    private static void BuildJDA() throws LoginException, InterruptedException {
+        JDABuilder builder = JDABuilder.createDefault(TOKEN);
+        builder.setAutoReconnect(true)
+                .setStatus(OnlineStatus.ONLINE)
+                .addEventListeners(new Bot())
+                .setActivity(Activity.playing("closed"));
+        jda = builder.build();
+        setSlashCommands();
+        connectJDBC();
+        jda.awaitReady();
+    }
+
+    public static void connectJDBC() {
+        String ip = getProperty("ip");
+        String db = getProperty("db");
+        String user = getProperty("user");
+        String passwd = getProperty("passwd");
         try {
             String url = "jdbc:mariadb://" + ip + "/" + db;
             System.out.println("Connecting \"" + url + "\" by " + user + "...");
             con = DriverManager.getConnection(url, user, passwd);
             if (con.isValid(0)) {
+                con.setAutoCommit(true);
                 System.out.println("JDBC connection established");
-                return 0;
             }
         } catch (SQLException e) {
             System.out.println("SQL ERROR: " + e.getMessage());
-            return 1;
         }
-
-        return 0;
+        BotSQL.setConnection(con);
     }
 
-    protected static ArrayList<SqlBundle> readSQL(String sql) throws SQLException {
-        PreparedStatement statement = con.prepareStatement(sql == null ? "select * from log;" : sql);
-        ResultSet rs = statement.executeQuery();
-        ArrayList<SqlBundle> bundles = new ArrayList<>();
-        while (rs.next()) {
-            bundles.add(new SqlBundle(
-                    rs.getLong("id"),
-                    rs.getString("channel"),
-                    rs.getString("client"),
-                    rs.getLong("time"),
-                    rs.getString("message"),
-                    rs.getString("object"),
-                    rs.getLong("repeattime"),
-                    rs.getString("status")
-            ));
+    public static void setSlashCommands() {
+        jda.updateCommands().addCommands(new CommandData("ping", "Ping!"))
+                .addCommands(new CommandData("addtime", "adds a new alarm at specified time.")
+                        .addOptions(new OptionData(OptionType.INTEGER, "day", "~day(s) later"),
+                                new OptionData(OptionType.INTEGER, "hour", "~hour(s) later"),
+                                new OptionData(OptionType.INTEGER, "minute", "~minute(s) later"),
+                                //new OptionData(OptionType.INTEGER, "second", "~second(s) later"),
+                                new OptionData(OptionType.STRING, "message", "Insert alarm message"),
+                                new OptionData(OptionType.MENTIONABLE, "to", "user who receive this alarm")))
+                .addCommands(new CommandData("list", "shows your active alarm(s)."))
+                .addCommands(new CommandData("debug", "Dev command")
+                        .addOptions(new OptionData(OptionType.STRING, "command", "Dev command"))).queue();
+    }
+
+    private static String getProperty(@NotNull String key) {
+        if (properties != null) {
+            return properties.getProperty(key);
         }
-        return bundles;
+        return null;
     }
 
-    protected static int deleteSQL(long id) throws SQLException {
-        PreparedStatement statement = con.prepareStatement("delete from log where id=?");
-        statement.setLong(1, id);
-        return statement.executeUpdate() == 1 ? 0 : 1;
-    }
-
-    protected static int writeSQL(SqlBundle bundle) throws SQLException {
-        PreparedStatement statement = con.prepareStatement("insert into log values (?,?,?,?,?,?,?,?);");
-        statement.setObject(1, bundle.Id);
-        statement.setObject(2, bundle.Channel);
-        statement.setObject(3, bundle.Client);
-        statement.setObject(4, bundle.Time);
-        statement.setObject(5, bundle.Message);
-        statement.setObject(6, bundle.Object);
-        statement.setObject(7, bundle.RepeatTime);
-        statement.setObject(8, bundle.Status);
-        int rs = statement.executeUpdate();
-        return rs == 1 ? 0 : 1;
+    private static String MilisToDateString(long PosixTime, String Locale) {
+        String timeFormat;
+        switch (Locale) {
+            case "KR":
+                timeFormat = "yyyy년 M월 d일 HH시 mm분";
+                break;
+            default:
+                timeFormat = "HH:mm:ss d MMM yyyy";
+                break;
+        }
+        return new SimpleDateFormat(timeFormat).format(new Date(PosixTime));
     }
 
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
-        switch (event.getName()) {
+        if (!isOnService) {
+            event.reply("503").setEphemeral(true).queue();
+            return;
+        }
+        String CommandName = event.getName();
+        long CommandTime = System.currentTimeMillis();
+        switch (CommandName) {
+            case "debug":
+                if (!event.getUser().getId().equals(properties.getProperty("devId"))) {
+                    event.reply("403").setEphemeral(true).queue();
+                    return;
+                }
+                switch (event.getOption("command").getAsString()) {
+                    case "forcesystemshutdown":
+                        event.reply("Shutting down").setEphemeral(true).complete();
+                        jda.shutdownNow();
+                        break;
+                    case "beginservice":
+                        jda.getPresence().setStatus(OnlineStatus.ONLINE);
+                        jda.getPresence().setActivity(Activity.playing("On service"));
+                        isOnService = true;
+                        event.reply("awaiting commands").setEphemeral(true).queue();
+                        break;
+                    default:
+                        event.reply("Wrong command, sir").setEphemeral(true).queue();
+                        break;
+                }
+                break;
             case "ping":
                 long time = System.currentTimeMillis();
-                event.reply("Pong!").setEphemeral(true)
-                        .flatMap(v ->
-                                event.getHook().editOriginalFormat("Pong: %d ms", System.currentTimeMillis() - time) // then edit original
-                        ).queue();
+                event.reply("Pong!").setEphemeral(true).flatMap(v -> event.getHook().editOriginalFormat(
+                        "Pong: %d ms", System.currentTimeMillis() - time)
+                ).queue();
                 break;
-            case "info":
-                event.reply("Discord Bot \"ReminderBot\"").setEphemeral(true).queue();
+            case "addtime":
+                long day = 0, hour = 0, min = 0, sec = 0;
+                String message = "";
+                IMentionable user = event.getUser();
+                for (var i : event.getOptions()) {
+                    switch (i.getName()) {
+                        case "day":
+                            day = i.getAsLong();
+                            break;
+                        case "hour":
+                            hour = i.getAsLong();
+                            break;
+                        case "minute":
+                            min = i.getAsLong();
+                            break;
+                        case "second":
+                            sec = i.getAsLong();
+                            break;
+                        case "message":
+                            message = i.getAsString();
+                            break;
+                        case "to":
+                            user = i.getAsMentionable();
+                            break;
+                    }
+                }
+
+                if (day < 0 || day > 30
+                        || hour < 0 || hour > 23
+                        || min < 0 || min > 59
+                        || sec < 0 || sec > 59
+                        || day + hour + min + sec == 0) {
+                    event.reply("Error: Wrong time data").setEphemeral(true).queue();
+                    return;
+                }
+                long milis = day * 24 * 60 * 60 * 1000
+                        + hour * 60 * 60 * 1000
+                        + min * 60 * 1000
+                        + sec * 1000;
+                var v = event.reply("Processing...").setEphemeral(true).complete();
+                SqlScheduleBundle bundle = new SqlScheduleBundle();
+                try {
+                    bundle.setId(BotSQL.getNewId());
+                    bundle.setGuild(event.getGuildChannel().getId());
+                    bundle.setMessageChannel(event.getMessageChannel().getId());
+                    bundle.setClient(event.getUser().getId());
+                    bundle.setMessage(message);
+                    bundle.setListedTime(CommandTime);
+                    bundle.setAlarmTime(CommandTime + milis);
+                    bundle.setTo(user.getAsMention());
+                    bundle.setRepeatTime(0);
+                    bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
+                    if (BotSQL.WriteSchedule(bundle)) {
+                        v.editOriginalFormat("A new alarm is added at\n%s", MilisToDateString(bundle.AlarmTime, BotSQL.ReadLocaleById(bundle.ClientId))).queue();
+                    } else {
+                        v.editOriginalFormat("Error occured. Please try again later.").queue();
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
                 break;
+            case "list":
+                ResultSet resultSet = null;
+                SqlScheduleBundle line;
+                try {
+                    resultSet = BotSQL.ReadSchedulesById(event.getGuildChannel().getId(), event.getMessageChannel().getId(), event.getUser().getId());
+                    String query = "";
+                    int count = 0;
+                    while (resultSet.next()) {
+                        count++;
+                        query += String.format("%s: %s - %s\n", count, MilisToDateString(resultSet.getLong(7), "KR"), resultSet.getString(5));
+                    }
+                    if (count == 0) {
+                        event.reply("Nothing to show").setEphemeral(true).queue();
+                        return;
+                    }
+                    var eb = new EmbedBuilder();
+                    eb.setColor(Color.red);
+                    eb.setAuthor(properties.getProperty("title"));
+                    eb.setTitle("Alarm List");
+                    eb.setDescription(String.format("%d found\n\n%s", count, query));
+                    eb.setTimestamp(Instant.now());
+
+                    event.replyEmbeds(eb.build()).setEphemeral(true).queue();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
         }
-    }
-
-    protected static void doTest() {
-        long startTime = Calendar.getInstance().getTimeInMillis();
-        int errorCount = 0;
-        System.out.println("===== Test mode =====");
-        try {
-            if (connectJDBC() == 0) {
-                System.out.println("===== INSERT test =====");
-                errorCount++;
-                if (writeSQL(new SqlBundle(1, "text_channel", "test_client", 1, "test_message", "test_object", 1, "Test")) == 0) {
-                    System.out.println("INSERT test successful\n");
-                    errorCount--;
-                }
-
-                System.out.println("===== SELECT test(1) =====");
-                errorCount++;
-                ArrayList<SqlBundle> bundles = readSQL("select * from log where id=1");
-                if (!bundles.isEmpty()) {
-                    System.out.println(bundles.get(0).getDataString());
-                    System.out.println("SELECT test successful\n");
-                    errorCount--;
-                }
-
-                System.out.println("===== DELETE test =====");
-                errorCount++;
-                if (deleteSQL(1) == 0) {
-                    System.out.println("DELETE test successful\n");
-                    errorCount--;
-                }
-
-                System.out.println("===== SELECT test(2) =====");
-                errorCount++;
-                if (readSQL("select * from log where id=1").isEmpty()) {
-                    System.out.println("SELECT test successful\n");
-                    errorCount--;
-                }
-            } else {
-                System.out.println("Connection Error");
-            }
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-        long endTime = Calendar.getInstance().getTimeInMillis();
-        System.out.println("===== Test ended =====");
-        System.out.println("Error count: " + errorCount);
-        System.out.println("Test time: " + (endTime-startTime) + "ms");
     }
 }
 

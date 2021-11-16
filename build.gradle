@@ -3,7 +3,6 @@ plugins {
 }
 
 apply plugin: 'application'
-mainClassName = 'Bot'
 
 group 'com.strange1'
 version '1.0-SNAPSHOT'
@@ -24,4 +23,9 @@ dependencies {
 }
 
 test {
+}
+
+compileJava.options.encoding = 'UTF-8'
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
 }
