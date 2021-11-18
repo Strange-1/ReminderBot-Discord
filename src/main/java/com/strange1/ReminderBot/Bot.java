@@ -1,11 +1,15 @@
 package com.strange1.ReminderBot;
 
-import net.dv8tion.jda.api.*;
-import net.dv8tion.jda.api.entities.*;
+import bell.oauth.discord.main.Response;
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.OnlineStatus;
+import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.entities.IMentionable;
+import net.dv8tion.jda.api.events.Event;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
-import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
@@ -16,33 +20,24 @@ import javax.security.auth.login.LoginException;
 import java.awt.*;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.text.DateFormat;
-import java.text.MessageFormat;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.Date;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import bell.oauth.discord.main.OAuthBuilder;
 
 public class Bot extends ListenerAdapter {
     static Properties properties;
     static JDA jda;
     protected static String TOKEN;
     private static Connection con;
-    private static Timer scheduleTimer;
-    private static EmbedBuilder embedBuilder;
     private static boolean isOnService = false;
+    private static Timer timer;
 
-    String[] messages;
-    long sqlTime;
-    String sqlMessage;
-
-    public static void main(String[] args) throws LoginException, InterruptedException, SQLException, IOException {
+    public static void main(String[] args) throws LoginException, InterruptedException, IOException {
         properties = new Properties();
         FileInputStream is = new FileInputStream("src/config/config.properties");
         properties.load(is);
@@ -52,7 +47,7 @@ public class Bot extends ListenerAdapter {
 
     public static void Init() throws LoginException, InterruptedException {
         BuildJDA();
-
+        BuildTimer();
         System.out.println("Hey ya!");
     }
 
@@ -66,6 +61,27 @@ public class Bot extends ListenerAdapter {
         setSlashCommands();
         connectJDBC();
         jda.awaitReady();
+    }
+
+    private static void BuildTimer() {
+        timer = new Timer();
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                long currentTime = System.currentTimeMillis();
+                long timePrevious = currentTime - currentTime % 60000;
+                long timeNext = currentTime - currentTime % 60000 + 60000;
+                try {
+                    var rs = BotSQL.ReadSchedulesByTime(timePrevious, timeNext, true);
+                    while (rs.next()) {
+                        DoAlarm(rs.getString(2), rs.getString(3), rs.getString(5), rs.getString(8));
+                        BotSQL.CompleteSchedulesByCode(rs.getString(11));
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }, 0, 60000);
     }
 
     public static void connectJDBC() {
@@ -89,7 +105,7 @@ public class Bot extends ListenerAdapter {
 
     public static void setSlashCommands() {
         jda.updateCommands().addCommands(new CommandData("ping", "Ping!"))
-                .addCommands(new CommandData("addtime", "adds a new alarm at specified time.")
+                .addCommands(new CommandData("addalarm", "adds a new alarm at specified time.")
                         .addOptions(new OptionData(OptionType.INTEGER, "day", "~day(s) later"),
                                 new OptionData(OptionType.INTEGER, "hour", "~hour(s) later"),
                                 new OptionData(OptionType.INTEGER, "minute", "~minute(s) later"),
@@ -97,8 +113,15 @@ public class Bot extends ListenerAdapter {
                                 new OptionData(OptionType.STRING, "message", "Insert alarm message"),
                                 new OptionData(OptionType.MENTIONABLE, "to", "user who receive this alarm")))
                 .addCommands(new CommandData("list", "shows your active alarm(s)."))
+                .addCommands(new CommandData("cancelalarm", "cancels an existing alarm by alarm code.")
+                        .addOption(OptionType.STRING, "code", "Alarm to cancel", true))
                 .addCommands(new CommandData("debug", "Dev command")
-                        .addOptions(new OptionData(OptionType.STRING, "command", "Dev command"))).queue();
+                        .addOptions(new OptionData(OptionType.STRING, "command", "Dev command")))
+                .addCommands(new CommandData("invite", "Give me an invitation URL"))
+                .addCommands(new CommandData("changetimezone", "changes your timezone. ex)GMT +- 00:00")
+                        .addOptions(new OptionData(OptionType.INTEGER, "hour", "timezone hour", true),
+                                new OptionData(OptionType.INTEGER, "minute", "timezone minute", false)))
+                .queue();
     }
 
     private static String getProperty(@NotNull String key) {
@@ -108,37 +131,47 @@ public class Bot extends ListenerAdapter {
         return null;
     }
 
-    private static String MilisToDateString(long PosixTime, String Locale) {
-        String timeFormat;
-        switch (Locale) {
-            case "KR":
-                timeFormat = "yyyy년 M월 d일 HH시 mm분";
-                break;
-            default:
-                timeFormat = "HH:mm:ss d MMM yyyy";
-                break;
-        }
-        return new SimpleDateFormat(timeFormat).format(new Date(PosixTime));
+    private static String MilisToDateString(long PosixTime, Pair<Integer, Integer> timezone) {
+        SimpleDateFormat dateFormat;
+        dateFormat = new SimpleDateFormat("h:mm a, MMM dd, yyyy z");
+        String tz = String.format("GMT%c%d%s", timezone.getLeft() < 0 ? '-' : '+', timezone.getLeft(), timezone.getRight() == 0 ? "" : String.format(":%2d", timezone.getRight()));
+        dateFormat.setTimeZone(TimeZone.getTimeZone(tz));
+        return dateFormat.format(new Date(PosixTime));
+    }
+
+    private static EmbedBuilder MakeSimpleEmbedBuilder(String Title, String Description) {
+        var eb = new EmbedBuilder();
+        eb.setColor(Color.red);
+        eb.setAuthor(properties.getProperty("title"));
+        eb.setTitle(Title);
+        eb.setDescription(Description);
+        eb.setTimestamp(Instant.now());
+        return eb;
     }
 
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
-        if (!isOnService) {
+        String CommandName = event.getName();
+        if (!isOnService && !CommandName.equals("debug")) {
             event.reply("503").setEphemeral(true).queue();
             return;
         }
-        String CommandName = event.getName();
+
         long CommandTime = System.currentTimeMillis();
         switch (CommandName) {
             case "debug":
                 if (!event.getUser().getId().equals(properties.getProperty("devId"))) {
                     event.reply("403").setEphemeral(true).queue();
                     return;
+                } else if (event.getOption("command") == null) {
+                    event.reply("Wrong command, sir").setEphemeral(true).queue();
+                    return;
                 }
                 switch (event.getOption("command").getAsString()) {
                     case "forcesystemshutdown":
                         event.reply("Shutting down").setEphemeral(true).complete();
-                        jda.shutdownNow();
+                        timer.cancel();
+                        jda.shutdown();
                         break;
                     case "beginservice":
                         jda.getPresence().setStatus(OnlineStatus.ONLINE);
@@ -157,7 +190,10 @@ public class Bot extends ListenerAdapter {
                         "Pong: %d ms", System.currentTimeMillis() - time)
                 ).queue();
                 break;
-            case "addtime":
+            case "invite":
+                event.replyEmbeds(MakeSimpleEmbedBuilder("ReminderBot - Invitation", properties.getProperty("invitationURL")).build()).setEphemeral(true).queue();
+                break;
+            case "addalarm":
                 long day = 0, hour = 0, min = 0, sec = 0;
                 String message = "";
                 IMentionable user = event.getUser();
@@ -196,7 +232,7 @@ public class Bot extends ListenerAdapter {
                         + hour * 60 * 60 * 1000
                         + min * 60 * 1000
                         + sec * 1000;
-                var v = event.reply("Processing...").setEphemeral(true).complete();
+                var v = event.replyEmbeds(MakeSimpleEmbedBuilder("New Alarm", "Processing").build()).setEphemeral(true).complete();
                 SqlScheduleBundle bundle = new SqlScheduleBundle();
                 try {
                     bundle.setId(BotSQL.getNewId());
@@ -209,42 +245,84 @@ public class Bot extends ListenerAdapter {
                     bundle.setTo(user.getAsMention());
                     bundle.setRepeatTime(0);
                     bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
+                    bundle.setCode(BotSQL.MakeNewCode(properties.getProperty("randomcode")));
                     if (BotSQL.WriteSchedule(bundle)) {
-                        v.editOriginalFormat("A new alarm is added at\n%s", MilisToDateString(bundle.AlarmTime, BotSQL.ReadLocaleById(bundle.ClientId))).queue();
+                        v.editOriginalEmbeds(
+                                MakeSimpleEmbedBuilder(
+                                        "New Alarm - Success",
+                                        String.format("A new alarm is added at %s\nAlarm code: %s",
+                                                MilisToDateString(bundle.AlarmTime, BotSQL.ReadTimezoneById(bundle.ClientId)),
+                                                bundle.Code))
+                                        .build()).queue();
                     } else {
-                        v.editOriginalFormat("Error occured. Please try again later.").queue();
+                        v.editOriginalEmbeds(MakeSimpleEmbedBuilder("New Alarm - Error", "Error occured. Please try again later.").build()).queue();
                     }
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
                 break;
             case "list":
-                ResultSet resultSet = null;
-                SqlScheduleBundle line;
+                ResultSet resultSet_listcommand;
                 try {
-                    resultSet = BotSQL.ReadSchedulesById(event.getGuildChannel().getId(), event.getMessageChannel().getId(), event.getUser().getId());
-                    String query = "";
+                    resultSet_listcommand = BotSQL.ReadSchedulesById(event.getGuildChannel().getId(), event.getMessageChannel().getId(), event.getUser().getId());
+                    StringBuilder query = new StringBuilder();
                     int count = 0;
-                    while (resultSet.next()) {
+                    while (resultSet_listcommand.next()) {
                         count++;
-                        query += String.format("%s: %s - %s\n", count, MilisToDateString(resultSet.getLong(7), "KR"), resultSet.getString(5));
+                        query.append(String.format("%s: %s - %s\n", resultSet_listcommand.getString(11), MilisToDateString(resultSet_listcommand.getLong(7), BotSQL.ReadTimezoneById(event.getUser().getId())), resultSet_listcommand.getString(5) != null ? resultSet_listcommand.getString(5) : "NULL"));
                     }
                     if (count == 0) {
-                        event.reply("Nothing to show").setEphemeral(true).queue();
+                        event.reply("There is no active alarm.").setEphemeral(true).queue();
                         return;
                     }
-                    var eb = new EmbedBuilder();
-                    eb.setColor(Color.red);
-                    eb.setAuthor(properties.getProperty("title"));
-                    eb.setTitle("Alarm List");
-                    eb.setDescription(String.format("%d found\n\n%s", count, query));
-                    eb.setTimestamp(Instant.now());
+                    var eb = MakeSimpleEmbedBuilder("Alarm List", String.format("%d found\n\n%s\nAlphabet %s is not used in the alarm code.", count, query, properties.getProperty("randomNotused")));
 
                     event.replyEmbeds(eb.build()).setEphemeral(true).queue();
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
+                break;
+            case "cancelalarm":
+                var canceloption = event.getOption("code");
+                if (canceloption == null) {
+                    event.reply("Error: insert alarm code. ex) ABCDEFGH").queue();
+                    return;
+                }
+                ResultSet resultSet_cancelcommand;
+                try {
+                    int deletedCount = BotSQL.CancelSchedulesByCode(event.getUser().getId(), canceloption.getAsString().toUpperCase());
+                    if (deletedCount > 0)
+                        event.reply("Successfully cancelled.").setEphemeral(true).queue();
+                    else
+                        event.reply("Cannot find active alarm of that code.").setEphemeral(true).queue();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+                break;
+            case "changetimezone":
+                int timezoneHour = ((int) event.getOption("hour").getAsLong());
+                int timezoneMinute = event.getOption("minute") != null ? ((int) event.getOption("minute").getAsLong()) : 0;
+                if (timezoneHour < 0 || timezoneHour > 12)
+                {
+                    event.reply("Timezone hour must be in range of 0 ~ 12.").setEphemeral(true).queue();
+                    return;
+                }
+                if (timezoneMinute < 0 || timezoneMinute > 59)
+                {
+                    event.reply("Timezone minute must be in range of 0 ~ 59.").setEphemeral(true).queue();
+                    return;
+                }
+                try {
+                    if (BotSQL.ChangeTimezone(event.getUser().getId(), timezoneHour, timezoneMinute) > 0)
+                        event.reply("Timezone is successfully changed.").setEphemeral(true).queue();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+                break;
         }
     }
-}
 
+    private static void DoAlarm(String GuildChannelId, String MessageChannelId, String Message, String To) {
+        jda.getTextChannelById(MessageChannelId).sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s\n%s", To, Message)).build()).queue();
+    }
+}

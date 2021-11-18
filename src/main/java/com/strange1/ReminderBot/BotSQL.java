@@ -1,9 +1,13 @@
 package com.strange1.ReminderBot;
 
+import net.dv8tion.jda.internal.utils.tuple.Pair;
+
+import javax.annotation.Nullable;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.Random;
 
 public final class BotSQL {
@@ -26,7 +30,7 @@ public final class BotSQL {
     public static boolean WriteSchedule(SqlScheduleBundle bundle) throws SQLException {
         if (!isConnectionSet())
             throw new SQLException("BotSQL: Not SQL connection established.");
-        PreparedStatement statement = connection.prepareStatement("insert into schedules values (?,?,?,?,?,?,?,?,?,?);");
+        PreparedStatement statement = connection.prepareStatement("insert into schedules values (?,?,?,?,?,?,?,?,?,?,?);");
         statement.setLong(1, bundle.id);
         statement.setString(2, bundle.GuildChannelId);
         statement.setString(3, bundle.MessageChannelId);
@@ -37,7 +41,24 @@ public final class BotSQL {
         statement.setNString(8, bundle.to);
         statement.setLong(9, bundle.RepeatTime);
         statement.setInt(10, bundle.Status.ordinal());
+        statement.setString(11, bundle.Code);
         return statement.executeUpdate() > 0;
+    }
+
+    public static String MakeNewCode(@Nullable String RandomPool) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement = connection.prepareStatement("select * from schedules where code=?");
+        String newCode;
+        String randomPool = RandomPool == null ? "ABCDEFGHJKLMNPSTUWXYZ" : RandomPool;
+        Random random = new Random();
+        do {
+            newCode = "";
+            for (var i = 0; i < 8; i++)
+                newCode += randomPool.charAt(random.nextInt(randomPool.length()));
+            statement.setString(1, newCode);
+        } while (statement.executeQuery().next());
+        return newCode;
     }
 
     public static long getNewId() throws SQLException {
@@ -49,19 +70,50 @@ public final class BotSQL {
         do {
             newId = random.nextLong();
             statement.setLong(1, newId);
-        } while (statement.executeQuery().getFetchSize()>0);
+        } while (statement.executeQuery().next());
         return newId;
     }
 
-    public static ResultSet ReadSchedulesById(String GuildCId, String MessageCID, String ClientId) throws SQLException
-    {
+    public static ResultSet ReadSchedulesById(String GuildCId, String MessageCID, String ClientId) throws SQLException {
         if (!isConnectionSet())
             throw new SQLException("BotSQL: Not SQL connection established.");
-        PreparedStatement statement = connection.prepareStatement("select * from schedules where GuildChannelId = ? and MessageChannelId = ? and ClientId = ? order by ListedTime;");
+        PreparedStatement statement = connection.prepareStatement("select * from schedules where GuildChannelId = ? and MessageChannelId = ? and ClientId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
         statement.setString(1, GuildCId);
         statement.setString(2, MessageCID);
         statement.setString(3, ClientId);
+        statement.setLong(4, System.currentTimeMillis());
+        statement.setInt(5, SqlScheduleBundle.StatusId.ACTIVE.ordinal());
+
         return statement.executeQuery();
+    }
+
+    public static ResultSet ReadSchedulesByTime(long TimeLeft, long TimeRight, boolean ActiveOnly) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement;
+        statement = connection.prepareStatement(String.format("select * from schedules where AlarmTime >= ? and AlarmTime < ?%s;", ActiveOnly ? (" and Status = " + SqlScheduleBundle.StatusId.ACTIVE.ordinal()) : ""));
+        statement.setLong(1, TimeLeft);
+        statement.setLong(2, TimeRight);
+        return statement.executeQuery();
+    }
+
+    public static int CancelSchedulesByCode(String ClientId, String Code) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement = connection.prepareStatement("update schedules set Status = ? where ClientId = ? and code = ?;");
+        statement.setInt(1, SqlScheduleBundle.StatusId.CANCELLED.ordinal());
+        statement.setString(2, ClientId);
+        statement.setString(3, Code);
+        return statement.executeUpdate();
+    }
+
+    public static int CompleteSchedulesByCode(String Code) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement = connection.prepareStatement("update schedules set Status = ? where code = ?;");
+        statement.setInt(1, SqlScheduleBundle.StatusId.COMPLETED.ordinal());
+        statement.setString(2, Code);
+        return statement.executeUpdate();
     }
 
     public static String ReadLocaleById(String ClientId) throws SQLException {
@@ -72,8 +124,42 @@ public final class BotSQL {
         var rs = statement.executeQuery();
         if (rs.next()) {
             return rs.getString(2);
+        } else
+            return "EN";
+    }
+
+    public static Pair<Integer, Integer> ReadTimezoneById(String ClientId) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement = connection.prepareStatement("select * from Users where ClientId = ?;");
+        statement.setString(1, ClientId);
+        var rs = statement.executeQuery();
+        Pair<Integer, Integer> timezone = Pair.of(0,0);
+        if (rs.next()) {
+            timezone = Pair.of(rs.getInt(3), rs.getInt(4));
+            return timezone;
+        } else
+            return timezone;
+    }
+
+    public static int ChangeTimezone(String ClientId, int hour, int minute) throws SQLException {
+        if (!isConnectionSet())
+            throw new SQLException("BotSQL: Not SQL connection established.");
+        PreparedStatement statement = connection.prepareStatement("select * from Users where ClientId = ?;");
+        statement.setString(1, ClientId);
+        if (!statement.executeQuery().next())
+        {
+            statement = connection.prepareStatement("insert into Users values (?, ?, ?, ?)");
+            statement.setString(1, ClientId);
+            statement.setString(2, "EN");
+            statement.setInt(3, 0);
+            statement.setInt(4, 0);
+            statement.executeUpdate();
         }
-        else
-            return null;
+        statement = connection.prepareStatement("update Users set TimezoneHour = ?, TimezoneMinute = ? where ClientId = ?;");
+        statement.setInt(1, hour);
+        statement.setInt(2,  minute);
+        statement.setString(3, ClientId);
+        return statement.executeUpdate();
     }
 }

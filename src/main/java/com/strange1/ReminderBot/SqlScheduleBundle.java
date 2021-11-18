@@ -1,5 +1,7 @@
 package com.strange1.ReminderBot;
 
+import java.sql.SQLException;
+
 public class SqlScheduleBundle {
     long id;
     String GuildChannelId;
@@ -11,11 +13,13 @@ public class SqlScheduleBundle {
     String to;
     long RepeatTime;
     StatusId Status;
+    String Code;
 
     public enum StatusId {
         READY,
         ACTIVE,
         CANCELLED,
+        COMPLETED,
         TEST
     }
 
@@ -57,5 +61,9 @@ public class SqlScheduleBundle {
 
     public void setStatus(StatusId status) {
         this.Status = status;
+    }
+
+    public void setCode(String newCode) {
+        this.Code = newCode;
     }
 }
