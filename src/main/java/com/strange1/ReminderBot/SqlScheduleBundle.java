@@ -1,10 +1,8 @@
 package com.strange1.ReminderBot;
 
-import java.sql.SQLException;
-
 public class SqlScheduleBundle {
     long id;
-    String GuildChannelId;
+    String GuildId;
     String MessageChannelId;
     String ClientId;
     String Message;
@@ -28,7 +26,7 @@ public class SqlScheduleBundle {
     }
 
     public void setGuild(String id) {
-        GuildChannelId = id;
+        GuildId = id;
     }
 
     public void setMessageChannel(String id) {

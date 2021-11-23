@@ -3,6 +3,7 @@ plugins {
 }
 
 apply plugin: 'application'
+mainClassName = 'com.strange1.ReminderBot.Bot'
 
 group 'com.strange1'
 version '1.0-SNAPSHOT'
@@ -13,15 +14,13 @@ repositories {
         name 'm2-dv8tion'
         url 'https://m2.dv8tion.net/releases'
     }
-    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.0'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
     implementation("net.dv8tion:JDA:4.3.0_277")
     implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.3'
-    implementation 'com.github.HayateLaTech:OAuth2Discord:-SNAPSHOT'
 }
 
 test {
