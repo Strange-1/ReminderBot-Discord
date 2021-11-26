@@ -77,14 +77,14 @@ public final class BotSQL {
     }
 
     private static long getNewLogId() throws SQLException {
-            CheckConnection();
-            PreparedStatement statement = connection.prepareStatement("select * from Logs where Id=?");
-            long newId;
-            do {
-                newId = random.nextLong();
-                statement.setLong(1, newId);
-            } while (statement.executeQuery().next());
-            return newId;
+        CheckConnection();
+        PreparedStatement statement = connection.prepareStatement("select * from Logs where Id=?");
+        long newId;
+        do {
+            newId = random.nextLong();
+            statement.setLong(1, newId);
+        } while (statement.executeQuery().next());
+        return newId;
     }
 
     public static ResultSet ReadSchedulesById(String GuildId, String MessageCID, String ClientId) throws SQLException {
