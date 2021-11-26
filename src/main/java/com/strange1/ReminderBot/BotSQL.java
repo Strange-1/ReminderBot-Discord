@@ -1,6 +1,8 @@
 package com.strange1.ReminderBot;
 
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.MessageChannel;
+import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.internal.utils.tuple.Pair;
 
 import javax.annotation.Nullable;
@@ -12,9 +14,12 @@ import java.util.Random;
 
 public final class BotSQL {
     public static Connection connection = null;
+    private static Random random = null;
 
     public static void setConnection(Connection connection) {
         BotSQL.connection = connection;
+        random = new Random();
+        random.setSeed(System.currentTimeMillis());
     }
 
     public static boolean CheckConnection() throws SQLException {
@@ -51,7 +56,6 @@ public final class BotSQL {
         PreparedStatement statement = connection.prepareStatement("select * from schedules where code=?");
         String newCode;
         String randomPool = RandomPool == null ? "ABCDEFGHJKLMNPSTUWXYZ" : RandomPool;
-        Random random = new Random();
         do {
             newCode = "";
             for (var i = 0; i < 8; i++)
@@ -65,7 +69,6 @@ public final class BotSQL {
         CheckConnection();
         PreparedStatement statement = connection.prepareStatement("select * from schedules where id=?");
         long newId;
-        Random random = new Random();
         do {
             newId = random.nextLong();
             statement.setLong(1, newId);
@@ -73,11 +76,21 @@ public final class BotSQL {
         return newId;
     }
 
+    private static long getNewLogId() throws SQLException {
+            CheckConnection();
+            PreparedStatement statement = connection.prepareStatement("select * from Logs where Id=?");
+            long newId;
+            do {
+                newId = random.nextLong();
+                statement.setLong(1, newId);
+            } while (statement.executeQuery().next());
+            return newId;
+    }
+
     public static ResultSet ReadSchedulesById(String GuildId, String MessageCID, String ClientId) throws SQLException {
         CheckConnection();
-        PreparedStatement statement = connection.prepareStatement("select * from schedules where MessageChannelId = ? and ClientId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
-        //statement.setString(1, GuildId);
-        statement.setString(1, MessageCID);
+        PreparedStatement statement = connection.prepareStatement("select * from schedules where GuildId = ? and ClientId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
+        statement.setString(1, GuildId);
         statement.setString(2, ClientId);
         statement.setLong(3, System.currentTimeMillis());
         statement.setInt(4, SqlScheduleBundle.StatusId.ACTIVE.ordinal());
@@ -154,10 +167,10 @@ public final class BotSQL {
         return statement.executeUpdate();
     }
 
-    public static String getPermission(Guild gChannel) throws SQLException {
+    public static String getPermission(Guild guild) throws SQLException {
         CheckConnection();
         PreparedStatement statement = connection.prepareStatement("select * from Permissions where GuildId = ?;");
-        statement.setString(1, gChannel.getId());
+        statement.setString(1, guild.getId());
         ResultSet rs = statement.executeQuery();
         if (rs.next()) {
             return rs.getString(2);
@@ -179,6 +192,18 @@ public final class BotSQL {
         statement = connection.prepareStatement("Update Permissions set Role = ? where GuildID = ?;");
         statement.setString(1, permission);
         statement.setString(2, guild.getId());
+        statement.executeUpdate();
+    }
+
+    public static void addLog(Guild guild, MessageChannel mChannel, User user, String command, long time) throws SQLException {
+        CheckConnection();
+        PreparedStatement statement = connection.prepareStatement("insert into Logs values(?, ?, ?, ?, ?, ?);");
+        statement.setLong(1, getNewLogId());
+        statement.setString(2, guild.getId());
+        statement.setString(3, mChannel.getId());
+        statement.setString(4, user.getId());
+        statement.setString(5, command);
+        statement.setLong(6, time);
         statement.executeUpdate();
     }
 }

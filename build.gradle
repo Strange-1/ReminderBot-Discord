@@ -21,6 +21,7 @@ dependencies {
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
     implementation("net.dv8tion:JDA:4.3.0_277")
     implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.3'
+    implementation 'org.slf4j:slf4j-api:1.7.32'
 }
 
 test {
