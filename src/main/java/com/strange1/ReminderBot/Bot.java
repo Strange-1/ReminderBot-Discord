@@ -416,7 +416,7 @@ public class Bot extends ListenerAdapter {
                 case "help":
                     String filePos = manualPath;
                     String lines = "";
-                    String command = event.getOption("command").getAsString();
+                    String command = event.getOption("command")!=null?event.getOption("command").getAsString():"help";
                     if (command.startsWith("/")) command = command.substring(1);
                     try {
                         lines = Files.readString(Path.of(filePos + command));
