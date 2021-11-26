@@ -55,7 +55,7 @@ public class Bot extends ListenerAdapter {
     }
 
     public static void Init(boolean isTestRun) throws LoginException, InterruptedException {
-        if (!connectJDBC()) {
+        if (!connectJDBC(getProperty(isTestRun?"testip":"normalip"))) {
             System.out.println("[Init] Aborting boot");
             return;
         }
@@ -103,8 +103,8 @@ public class Bot extends ListenerAdapter {
         }, 0, 60000);
     }
 
-    public static boolean connectJDBC() {
-        String ip = getProperty("ip");
+    public static boolean connectJDBC(String IP) {
+        String ip = IP;
         String db = getProperty("db");
         String user = getProperty("user");
         String passwd = getProperty("passwd");
@@ -165,6 +165,7 @@ public class Bot extends ListenerAdapter {
         timeFormat = new SimpleDateFormat("h:mm a (z)", Locale.ENGLISH);
         String tz = String.format("GMT%c%d%s", timezone.getLeft() < 0 ? '-' : '+', timezone.getLeft(), timezone.getRight() == 0 ? "" : String.format(":%2d", timezone.getRight()));
         timeFormat.setTimeZone(TimeZone.getTimeZone(tz));
+        dateFormat.setTimeZone(TimeZone.getTimeZone(tz));
         return Pair.of(dateFormat.format(new Date(PosixTime)), timeFormat.format(new Date(PosixTime)));
     }
 
