@@ -15,8 +15,10 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.security.auth.login.LoginException;
 import java.awt.*;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
+import java.nio.CharBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -33,6 +35,7 @@ public class Bot extends ListenerAdapter {
     protected static String TOKEN;
     private static boolean isOnService = false;
     private static Timer timer;
+    private static String manualPath;
 
     public static void main(String[] args) throws LoginException, InterruptedException, IOException {
         properties = new Properties();
@@ -40,10 +43,12 @@ public class Bot extends ListenerAdapter {
         properties.load(is);
         if (args.length == 0) {
             TOKEN = getProperty("TOKEN");
+            manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
             Init(false);
         } else if (args[0].equals("-t")) {
             TOKEN = getProperty("TOKENTEST");
+            manualPath = getProperty("manualPathTest");
             System.out.println("[main] TEST RUN");
             Init(true);
         }
@@ -142,6 +147,8 @@ public class Bot extends ListenerAdapter {
                         , new CommandData("setauthority", "Choose a role who can use this bot.")
                                 .addOption(OptionType.ROLE, "role", "Who can use this bot?", true)
                         , new CommandData("whocanusethis", "What role can use this bot?")
+                        , new CommandData("help", "Command manual")
+                                .addOption(OptionType.STRING, "command", "Enter a command")
                 ).queue();
     }
 
@@ -404,6 +411,23 @@ public class Bot extends ListenerAdapter {
                     } catch (SQLException e) {
                         e.printStackTrace();
                     }
+                    break;
+                case "help":
+                    String filePos = manualPath;
+                    String lines = "";
+                    String command = event.getOption("command").getAsString();
+                    if (command.startsWith("/")) command = command.substring(1);
+                    try {
+                        lines = Files.readString(Path.of(filePos + command));
+                    } catch (Exception e) {
+                        command = "help";
+                        try {
+                            lines = Files.readString(Path.of(filePos + command));
+                        } catch (Exception ex) {
+                            event.reply("Error: Wrong command.").setEphemeral(true).queue();
+                        }
+                    }
+                    event.replyEmbeds(MakeSimpleEmbedBuilder(String.format("Manual - %s", command), lines).build()).setEphemeral(true).queue();
                     break;
             }
         }

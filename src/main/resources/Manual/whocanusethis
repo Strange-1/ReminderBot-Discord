@@ -1,0 +1,3 @@
+Usage: /whocanusethis
+Role: Displays what role can order this bot. Default value is @everyone.
+Returns: A role who can use ReminderBot

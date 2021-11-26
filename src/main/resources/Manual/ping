@@ -1,0 +1,3 @@
+Usage: /ping
+Role: Speed test between this device and ReminderBot
+Returns: Response time in millisecond (Shorter is better)

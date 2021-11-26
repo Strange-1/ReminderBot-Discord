@@ -1,0 +1,3 @@
+Usage: /list
+Role: Displays your all alarms in this server.
+Returns: List of alarm time, message, receiver, channel and alarm code

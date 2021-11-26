@@ -1,0 +1,3 @@
+Usage: /setauthority [Role]
+Role: Makes this bot listen to only [Role] and administrators' commands. This command is admin-only.
+Returns: Result of the task

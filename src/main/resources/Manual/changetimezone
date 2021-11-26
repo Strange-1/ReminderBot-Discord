@@ -1,0 +1,3 @@
+Usage: /changetimezone [hour] [minute]
+Role: Changes your timezone to GMT+[hour(-12~14)]:[minute(0~59, optional)]. Default value is GMT+0.
+Returns: Result of the task

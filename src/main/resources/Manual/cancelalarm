@@ -1,0 +1,3 @@
+Usage: /cancelalarm [alarm code]
+Role: Cancels your scheduled alarm of [alarm code]. Only YOUR alarm can be cancelled.
+Returns: Result of the task

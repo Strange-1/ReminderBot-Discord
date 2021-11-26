@@ -1,0 +1,3 @@
+Usage: /addalarm [day] [hour] [minute] [message] [to]
+Role: Makes a new alarm that will mention [to] after the [day][hour][minute] you entered.
+Returns: An alarm code of the added alarm
