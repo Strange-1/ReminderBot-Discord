@@ -75,9 +75,8 @@ public final class BotSQL {
 
     public static ResultSet ReadSchedulesById(String GuildId, String MessageCID, String ClientId) throws SQLException {
         CheckConnection();
-        PreparedStatement statement = connection.prepareStatement("select * from schedules where MessageChannelId = ? and ClientId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
-        //statement.setString(1, GuildId);
-        statement.setString(1, MessageCID);
+        PreparedStatement statement = connection.prepareStatement("select * from schedules where GuildId = ? and ClientId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
+        statement.setString(1, GuildId);
         statement.setString(2, ClientId);
         statement.setLong(3, System.currentTimeMillis());
         statement.setInt(4, SqlScheduleBundle.StatusId.ACTIVE.ordinal());
@@ -154,10 +153,10 @@ public final class BotSQL {
         return statement.executeUpdate();
     }
 
-    public static String getPermission(Guild gChannel) throws SQLException {
+    public static String getPermission(Guild guild) throws SQLException {
         CheckConnection();
         PreparedStatement statement = connection.prepareStatement("select * from Permissions where GuildId = ?;");
-        statement.setString(1, gChannel.getId());
+        statement.setString(1, guild.getId());
         ResultSet rs = statement.executeQuery();
         if (rs.next()) {
             return rs.getString(2);
