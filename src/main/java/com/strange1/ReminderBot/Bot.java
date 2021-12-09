@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.Scanner;
 
 public class Bot extends ListenerAdapter {
     static Properties properties;
@@ -43,7 +44,9 @@ public class Bot extends ListenerAdapter {
         properties.load(is);
         if (args.length == 0) {
             System.out.print("TOKEN(NORMAL): ");
-            TOKEN = new Scanner(System.in).next();
+            var sc = new Scanner(System.in);
+            TOKEN = sc.nextLine();
+            sc.close();
             manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
             if (TOKEN.isBlank()) {
