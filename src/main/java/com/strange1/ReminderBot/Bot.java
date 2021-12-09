@@ -45,7 +45,7 @@ public class Bot extends ListenerAdapter {
         properties.load(is);
         if (args.length == 0) {
             System.out.print("TOKEN(NORMAL): ");
-            TOKEN = Files.readString(Path.of("../TOKEN"), StandardCharsets.UTF_8);
+            TOKEN = Files.readAllLines(Path.of("../TOKEN")).get(0);
             manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
             Init(false);
