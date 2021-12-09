@@ -76,7 +76,7 @@ public class Bot extends ListenerAdapter {
                 .setAutoReconnect(true)
                 .setStatus(OnlineStatus.ONLINE)
                 .addEventListeners(new Bot())
-                .setActivity(Activity.playing("closed"));
+                .setActivity(Activity.playing("Closed"));
         jda = builder.build();
         setSlashCommands();
         jda.awaitReady();
@@ -87,6 +87,7 @@ public class Bot extends ListenerAdapter {
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
+                jda.getPresence().setActivity(Activity.playing(String.format("Running on %d servers", getServerCount())));
                 long currentTime = System.currentTimeMillis();
                 long timePrevious = currentTime - currentTime % 60000;
                 long timeNext = currentTime - currentTime % 60000 + 60000;
@@ -179,7 +180,7 @@ public class Bot extends ListenerAdapter {
         return eb;
     }
 
-    public int getServerCount() {
+    public static int getServerCount() {
         return jda.getGuilds().size();
     }
 
@@ -220,7 +221,7 @@ public class Bot extends ListenerAdapter {
                     break;
                 case "beginservice": //서비스 시작. 이 명령이 없으면 Dev만 서비스 이용 가능
                     jda.getPresence().setStatus(OnlineStatus.ONLINE);
-                    jda.getPresence().setActivity(Activity.playing(String.format("Running on %d servers", getServerCount())));
+                    jda.getPresence().setActivity(Activity.playing("On Service"));
                     isOnService = true;
                     event.reply("awaiting commands").setEphemeral(true).queue();
                     break;
