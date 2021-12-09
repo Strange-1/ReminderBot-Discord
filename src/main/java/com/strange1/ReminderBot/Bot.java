@@ -17,6 +17,7 @@ import javax.security.auth.login.LoginException;
 import java.awt.*;
 import java.io.*;
 import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -33,7 +34,7 @@ import java.util.Scanner;
 public class Bot extends ListenerAdapter {
     static Properties properties;
     static JDA jda;
-    protected static String TOKEN = null;
+    protected static String TOKEN = "";
     private static boolean isOnService = false;
     private static Timer timer;
     private static String manualPath;
@@ -44,7 +45,7 @@ public class Bot extends ListenerAdapter {
         properties.load(is);
         if (args.length == 0) {
             System.out.print("TOKEN(NORMAL): ");
-            TOKEN = Files.readString(Path.of("../TOKEN"));
+            TOKEN = Files.readString(Path.of("../TOKEN"), StandardCharsets.UTF_8);
             manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
             Init(false);
