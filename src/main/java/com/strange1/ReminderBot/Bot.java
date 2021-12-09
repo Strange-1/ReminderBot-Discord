@@ -42,20 +42,30 @@ public class Bot extends ListenerAdapter {
         FileInputStream is = new FileInputStream("src/config/config.properties");
         properties.load(is);
         if (args.length == 0) {
-            TOKEN = getProperty("TOKEN");
+            System.out.print("TOKEN(NORMAL): ");
+            TOKEN = new Scanner(System.in).next();
             manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
+            if (TOKEN.isBlank()) {
+                System.out.println("Aborting Startup");
+                return;
+            }
             Init(false);
         } else if (args[0].equals("-t")) {
-            TOKEN = getProperty("TOKENTEST");
+            TOKEN = args[1];
             manualPath = getProperty("manualPathTest");
             System.out.println("[main] TEST RUN");
             Init(true);
+        } else if (args[0].equals("-n")) {
+            TOKEN = args[1];
+            manualPath = getProperty("manualPathNormal");
+            System.out.println(String.format("[main] NORMAL RUN by TOKEN %s", args[1]));
+            Init(false);
         }
     }
 
     public static void Init(boolean isTestRun) throws LoginException, InterruptedException {
-        if (!connectJDBC(getProperty(isTestRun?"testip":"normalip"))) {
+        if (!connectJDBC(getProperty(isTestRun ? "testip" : "normalip"))) {
             System.out.println("[Init] Aborting boot");
             return;
         }
@@ -87,6 +97,8 @@ public class Bot extends ListenerAdapter {
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
+                if (!isOnService)
+                    return;
                 jda.getPresence().setActivity(Activity.playing(String.format("Running on %d servers", getServerCount())));
                 long currentTime = System.currentTimeMillis();
                 long timePrevious = currentTime - currentTime % 60000;
@@ -417,7 +429,7 @@ public class Bot extends ListenerAdapter {
                 case "help":
                     String filePos = manualPath;
                     String lines = "";
-                    String command = event.getOption("command")!=null?event.getOption("command").getAsString():"help";
+                    String command = event.getOption("command") != null ? event.getOption("command").getAsString() : "help";
                     if (command.startsWith("/")) command = command.substring(1);
                     try {
                         lines = Files.readString(Path.of(filePos + command));
