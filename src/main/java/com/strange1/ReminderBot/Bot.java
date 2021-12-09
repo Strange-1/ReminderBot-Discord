@@ -33,7 +33,7 @@ import java.util.Scanner;
 public class Bot extends ListenerAdapter {
     static Properties properties;
     static JDA jda;
-    protected static String TOKEN;
+    protected static String TOKEN = null;
     private static boolean isOnService = false;
     private static Timer timer;
     private static String manualPath;
@@ -45,13 +45,15 @@ public class Bot extends ListenerAdapter {
         if (args.length == 0) {
             System.out.print("TOKEN(NORMAL): ");
             BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-            TOKEN = br.readLine();
-            manualPath = getProperty("manualPathNormal");
-            System.out.println("[main] NORMAL RUN");
-            if (TOKEN.isBlank()) {
-                System.out.println("Aborting Startup");
+            while (TOKEN == null) {
+                TOKEN = br.readLine();
+            }
+            if (TOKEN.isEmpty()) {
+                System.out.println("[main] Aborting startup");
                 return;
             }
+            manualPath = getProperty("manualPathNormal");
+            System.out.println("[main] NORMAL RUN");
             Init(false);
         } else if (args[0].equals("-t")) {
             TOKEN = args[1];
