@@ -44,9 +44,8 @@ public class Bot extends ListenerAdapter {
         properties.load(is);
         if (args.length == 0) {
             System.out.print("TOKEN(NORMAL): ");
-            var sc = new Scanner(System.in);
-            TOKEN = sc.nextLine();
-            sc.close();
+            BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+            TOKEN = br.readLine();
             manualPath = getProperty("manualPathNormal");
             System.out.println("[main] NORMAL RUN");
             if (TOKEN.isBlank()) {
