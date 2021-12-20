@@ -1,6 +1,7 @@
 Command list
 
 /addtimer
+/addalarm
 /cancelalarm
 /changetimezone
 /invite

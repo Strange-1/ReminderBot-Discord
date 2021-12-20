@@ -351,7 +351,7 @@ public class Bot extends ListenerAdapter {
                     }
                     var newAlarmDate = new TimeData();
                     try {
-                        Pair<Integer, Integer> timezone = BotSQL.ReadTimezoneById(user.getId(), null);
+                        Pair<Integer, Integer> timezone = BotSQL.ReadTimezoneById(event.getUser().getId(), null);
                         if (timezone == null) {
                             event.reply("Error: Your timezone is not set. Please use \"/changetimezone\" first.").setEphemeral(true).queue();
                             return;
