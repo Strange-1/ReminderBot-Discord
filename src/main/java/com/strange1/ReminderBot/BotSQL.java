@@ -135,7 +135,7 @@ public final class BotSQL {
             return "EN";
     }
 
-    public static Pair<Integer, Integer> ReadTimezoneById(String ClientId) throws SQLException {
+    public static Pair<Integer, Integer> ReadTimezoneById(String ClientId, @Nullable Pair<Integer, Integer> Default) throws SQLException {
         CheckConnection();
         PreparedStatement statement = connection.prepareStatement("select * from Users where ClientId = ?;");
         statement.setString(1, ClientId);
@@ -145,7 +145,7 @@ public final class BotSQL {
             timezone = Pair.of(rs.getInt(3), rs.getInt(4));
             return timezone;
         } else
-            return timezone;
+            return Default;
     }
 
     public static int ChangeTimezone(String ClientId, int hour, int minute) throws SQLException {

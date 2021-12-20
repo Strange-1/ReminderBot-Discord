@@ -16,8 +16,6 @@ import org.jetbrains.annotations.NotNull;
 import javax.security.auth.login.LoginException;
 import java.awt.*;
 import java.io.*;
-import java.nio.CharBuffer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -29,7 +27,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.Scanner;
 
 public class Bot extends ListenerAdapter {
     static Properties properties;
@@ -140,17 +137,25 @@ public class Bot extends ListenerAdapter {
 
     public static void setSlashCommands() {
         jda.updateCommands().addCommands(new CommandData("ping", "Ping!"))
-                .addCommands(new CommandData("addalarm", "Adds an alarm that will ring after the set time.")
-                                .addOptions(new OptionData(OptionType.INTEGER, "day", "~day(s) later"),
-                                        new OptionData(OptionType.INTEGER, "hour", "~hour(s) later"),
-                                        new OptionData(OptionType.INTEGER, "minute", "~minute(s) later"),
+                .addCommands(new CommandData("addtimer", "Adds an alarm that will ring after the set time.")
+                                .addOptions(new OptionData(OptionType.INTEGER, "day", "~day(s) later (>=0)"),
+                                        new OptionData(OptionType.INTEGER, "hour", "~hour(s) later (-24~23)"),
+                                        new OptionData(OptionType.INTEGER, "minute", "~minute(s) later (-60~59)"),
                                         new OptionData(OptionType.STRING, "message", "Enter a message."),
+                                        new OptionData(OptionType.MENTIONABLE, "to", "user(s) who receive this alarm"))
+                        , new CommandData("addalarm", "Adds an alarm that will ring scheduled time.")
+                                .addOptions(new OptionData(OptionType.INTEGER, "hour", "alarm hour(24h) ex)14", true),
+                                        new OptionData(OptionType.INTEGER, "minute", "alarm minute ex)15", true),
+                                        new OptionData(OptionType.INTEGER, "year", "alarm year ex)2021"),
+                                        new OptionData(OptionType.INTEGER, "month", "alarm month ex)7"),
+                                        new OptionData(OptionType.INTEGER, "day", "alarm day ex)31"),
+                                        new OptionData(OptionType.STRING, "message", "Enter a message"),
                                         new OptionData(OptionType.MENTIONABLE, "to", "user(s) who receive this alarm"))
                         , new CommandData("list", "Displays your scheduled alarm(s).")
                         , new CommandData("cancelalarm", "Cancels the scheduled alarm. ")
                                 .addOption(OptionType.STRING, "code", "a Code of alarm to cancel", true)
                         , new CommandData("debug", "Dev command")
-                                .addOption(OptionType.STRING, "command", "Dev command")
+                                .addOption(OptionType.STRING, "command", "Dev command", true)
                         , new CommandData("invite", "Gives an invitation URL to you.")
                         , new CommandData("changetimezone", "Changes your timezone. ex)GMT +- 00:00")
                                 .addOptions(new OptionData(OptionType.INTEGER, "hour", "Timezone hour", true),
@@ -196,13 +201,13 @@ public class Bot extends ListenerAdapter {
 
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
-        long CommandTime = System.currentTimeMillis();
+        var CommandTime = new TimeData(System.currentTimeMillis());
         try {
             String fullCommand = event.getCommandPath();
             for (var option : event.getOptions()) {
                 fullCommand += String.format(" %s", option.toString());
             }
-            BotSQL.addLog(event.getGuild(), event.getMessageChannel(), event.getUser(), fullCommand, CommandTime);
+            BotSQL.addLog(event.getGuild(), event.getMessageChannel(), event.getUser(), fullCommand, CommandTime.getPosixTime());
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -257,21 +262,76 @@ public class Bot extends ListenerAdapter {
                 e.printStackTrace();
             }
             //개인별 명령 권한 통과
+
+            String message;
+            IMentionable user;
+            long day = 0, hour = 0, min = 0;
             switch (CommandName) {
                 case "ping": //핑
                     var pinghook = event.reply("Pong!").setEphemeral(true).complete();
-                    pinghook.editOriginalFormat("Pong: %d ms", System.currentTimeMillis() - CommandTime).queue();
+                    pinghook.editOriginalFormat("Pong: %d ms", System.currentTimeMillis() - CommandTime.getPosixTime()).queue();
                     break;
                 case "invite": //초대 URL 출력
                     event.replyEmbeds(MakeSimpleEmbedBuilder("ReminderBot - Invitation", properties.getProperty("invitationURL")).build())
                             .setEphemeral(true).queue();
                     break;
-                case "addalarm": //알람 추가
-                    long day = 0, hour = 0, min = 0;
-                    String message = "";
-                    IMentionable user = event.getUser();
+                case "addtimer": //타이머식 알람 추가
+                    message = "";
+                    user = event.getUser();
                     for (var i : event.getOptions()) {
                         switch (i.getName()) {
+                            case "day":
+                                day += i.getAsLong();
+                                break;
+                            case "hour":
+                                if (hour < 0) {
+                                    day--;
+                                    hour += 24;
+                                }
+                                hour += i.getAsLong();
+                                break;
+                            case "minute":
+                                if (min < 0) {
+                                    hour--;
+                                    min += 60;
+                                }
+                                min += i.getAsLong();
+                                break;
+                            case "message":
+                                message = i.getAsString();
+                                break;
+                            case "to":
+                                user = i.getAsMentionable();
+                                break;
+                        }
+                    }
+                    if (day < 0
+                            || hour < 0 || hour > 23
+                            || min < 0 || min > 59
+                            || day + hour + min == 0) {
+                        event.reply("Error: Wrong time data").setEphemeral(true).queue();
+                        return;
+                    }
+                    long milis = day * 24 * 60 * 60 * 1000
+                            + hour * 60 * 60 * 1000
+                            + min * 60 * 1000;
+                    long newAlarmTime = CommandTime.getPosixTime() + milis;
+                    addNewAlarm(event, message, CommandTime.getPosixTime(), newAlarmTime, user);
+                    break;
+                case "addalarm": //시각 지정식 알람 추가
+                    int year = CommandTime.getField(TimeData.Field.YEAR);
+                    int month = CommandTime.getField(TimeData.Field.MONTH);
+                    day = CommandTime.getField(TimeData.Field.DAY);
+                    message = "";
+                    user = event.getUser();
+                    for (var i : event.getOptions()) {
+                        switch (i.getName()) {
+                            case "year":
+                                year = (int) i.getAsLong();
+                                break;
+                            case "month":
+                                month = (int) i.getAsLong();
+                                break;
                             case "day":
                                 day = i.getAsLong();
                                 break;
@@ -289,44 +349,24 @@ public class Bot extends ListenerAdapter {
                                 break;
                         }
                     }
-
-                    if (day < 0 || day > 30
-                            || hour < 0 || hour > 23
-                            || min < 0 || min > 59
-                            || day + hour + min == 0) {
+                    var newAlarmDate = new TimeData();
+                    try {
+                        Pair<Integer, Integer> timezone = BotSQL.ReadTimezoneById(user.getId(), null);
+                        if (timezone == null) {
+                            event.reply("Error: Your timezone is not set. Please use \"/changetimezone\" first.").setEphemeral(true).queue();
+                            return;
+                        }
+                        newAlarmDate.setTimeZone(SimpleTimeZone.getTimeZone(
+                                        String.format("GMT%c%d%s", timezone.getLeft() < 0 ? '-' : '+', timezone.getLeft(), timezone.getRight() == 0 ? "" : String.format(":%2d", timezone.getRight()))))
+                                .setField(TimeData.Field.YEAR, year)
+                                .setField(TimeData.Field.MONTH, month)
+                                .setField(TimeData.Field.DAY, (int) day)
+                                .setField(TimeData.Field.HOUR, (int) hour)
+                                .setField(TimeData.Field.MINUTE, (int) min);
+                        addNewAlarm(event, message, CommandTime.getPosixTime(), newAlarmDate.getPosixTime(), user);
+                    } catch (Exception e) {
                         event.reply("Error: Wrong time data").setEphemeral(true).queue();
                         return;
-                    }
-                    long milis = day * 24 * 60 * 60 * 1000
-                            + hour * 60 * 60 * 1000
-                            + min * 60 * 1000;
-                    var v = event.replyEmbeds(MakeSimpleEmbedBuilder("New Alarm", "Processing").build()).setEphemeral(true).complete();
-                    SqlScheduleBundle bundle = new SqlScheduleBundle();
-                    try {
-                        bundle.setId(BotSQL.getNewId());
-                        bundle.setGuild(event.getGuild().getId());
-                        bundle.setMessageChannel(event.getMessageChannel().getId());
-                        bundle.setClient(event.getUser().getId());
-                        bundle.setMessage(message);
-                        bundle.setListedTime(CommandTime);
-                        bundle.setAlarmTime(CommandTime + milis);
-                        bundle.setTo(user.getAsMention());
-                        bundle.setRepeatTime(0);
-                        bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
-                        bundle.setCode(BotSQL.MakeNewCode(properties.getProperty("randomcode")));
-                        if (BotSQL.WriteSchedule(bundle)) {
-                            v.editOriginalEmbeds(
-                                    MakeSimpleEmbedBuilder(
-                                            "New Alarm - Success",
-                                            String.format("A new alarm has been added at %s\nAlarm code: %s",
-                                                    MilisToDateString(bundle.AlarmTime, BotSQL.ReadTimezoneById(bundle.ClientId)),
-                                                    bundle.Code))
-                                            .build()).queue();
-                        } else {
-                            v.editOriginalEmbeds(MakeSimpleEmbedBuilder("New Alarm - Error", "Error occured. Please try again later.").build()).queue();
-                        }
-                    } catch (SQLException e) {
-                        e.printStackTrace();
                     }
                     break;
                 case "list": //알람 목록 출력.
@@ -338,17 +378,18 @@ public class Bot extends ListenerAdapter {
                         Pair<String, String> datePair;
                         while (resultSet_listcommand.next()) {
                             count++;
-                            datePair = MilisToDateString(resultSet_listcommand.getLong(7), BotSQL.ReadTimezoneById(event.getUser().getId()));
+                            datePair = MilisToDateString(resultSet_listcommand.getLong(7), BotSQL.ReadTimezoneById(event.getUser().getId(), Pair.of(0, 0)));
                             TextChannel messageChannel = event.getGuild().getTextChannelById(resultSet_listcommand.getString(3));
                             query.append(String.format(
                                     "Alarm code: %s\nDate: %s\nTime: %s\nChannel: %s\nMessage: %s\n" +
-                                            "To: %s\n\n"
+                                            "To: %s\nBy: %s\n\n"
                                     , resultSet_listcommand.getString(11)
                                     , datePair.getLeft()
                                     , datePair.getRight()
                                     , messageChannel != null ? messageChannel.getName() : "== Deleted channel =="
                                     , resultSet_listcommand.getString(5) != null ? resultSet_listcommand.getString(5) : "NULL"
                                     , resultSet_listcommand.getString(8)
+                                    , jda.getUserById(resultSet_listcommand.getString(4)).getName()
                             ));
                         }
                         if (count == 0) {
@@ -444,6 +485,41 @@ public class Bot extends ListenerAdapter {
             }
         }
 
+    }
+
+    private static boolean addNewAlarm(SlashCommandEvent event, String message, long ListedTime, long AlarmTime, IMentionable user) {
+        var v = event.replyEmbeds(MakeSimpleEmbedBuilder("New Alarm", "Processing").build()).setEphemeral(true).complete();
+        SqlScheduleBundle bundle = new SqlScheduleBundle();
+        try {
+            bundle.setId(BotSQL.getNewId());
+            bundle.setGuild(event.getGuild().getId());
+            bundle.setMessageChannel(event.getMessageChannel().getId());
+            bundle.setClient(event.getUser().getId());
+            bundle.setMessage(message);
+            bundle.setListedTime(ListedTime);
+            bundle.setAlarmTime(AlarmTime);
+            bundle.setTo(user.getAsMention());
+            bundle.setRepeatTime(0);
+            bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
+            bundle.setCode(BotSQL.MakeNewCode(properties.getProperty("randomcode")));
+            if (BotSQL.WriteSchedule(bundle)) {
+                Pair<Integer, Integer> timezone = BotSQL.ReadTimezoneById(bundle.ClientId, null);
+                v.editOriginalEmbeds(
+                        MakeSimpleEmbedBuilder(
+                                "New Alarm - Success",
+                                String.format("A new alarm has been added at %s\nAlarm code: %s\n%s",
+                                        MilisToDateString(bundle.AlarmTime, timezone != null ? timezone : Pair.of(0, 0)),
+                                        bundle.Code,
+                                        timezone != null ? "" : "Your timezone is not set. Please use [/changetimezone]."))
+                                .build()).queue();
+            } else {
+                v.editOriginalEmbeds(MakeSimpleEmbedBuilder("New Alarm - Error", "Error occured. Please try again later.").build()).queue();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
 
     private static boolean hasPermission(Guild guild, String userId) throws SQLException { //특정 멤버의 봇 사용 권한 확인하기
