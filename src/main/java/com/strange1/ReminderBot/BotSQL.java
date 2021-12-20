@@ -98,6 +98,17 @@ public final class BotSQL {
         return statement.executeQuery();
     }
 
+    public static ResultSet ReadSchedulesById(String GuildId) throws SQLException
+    {
+        CheckConnection();
+        PreparedStatement statement = connection.prepareStatement("select * from schedules where GuildId = ? and AlarmTime > ? and Status = ? order by ListedTime;");
+        statement.setString(1, GuildId);
+        statement.setLong(2, System.currentTimeMillis());
+        statement.setInt(3, SqlScheduleBundle.StatusId.ACTIVE.ordinal());
+
+        return statement.executeQuery();
+    }
+
     public static ResultSet ReadSchedulesByTime(long TimeLeft, long TimeRight, boolean ActiveOnly) throws SQLException {
         CheckConnection();
         PreparedStatement statement;

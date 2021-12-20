@@ -6,6 +6,7 @@ Command list
 /changetimezone
 /invite
 /list
+/listall
 /ping
 /setauthority
 /whocanusethis

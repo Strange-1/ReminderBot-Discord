@@ -152,6 +152,7 @@ public class Bot extends ListenerAdapter {
                                         new OptionData(OptionType.STRING, "message", "Enter a message"),
                                         new OptionData(OptionType.MENTIONABLE, "to", "user(s) who receive this alarm"))
                         , new CommandData("list", "Displays your scheduled alarm(s).")
+                        , new CommandData("listall", "Displays everyone's scheduled alarms in this server.")
                         , new CommandData("cancelalarm", "Cancels the scheduled alarm. ")
                                 .addOption(OptionType.STRING, "code", "a Code of alarm to cancel", true)
                         , new CommandData("debug", "Dev command")
@@ -187,12 +188,20 @@ public class Bot extends ListenerAdapter {
 
     private static EmbedBuilder MakeSimpleEmbedBuilder(String Title, String Description) {
         var eb = new EmbedBuilder();
-        eb.setColor(Color.red);
-        eb.setAuthor(properties.getProperty("title"));
-        eb.setTitle(Title);
-        eb.setDescription(Description);
-        eb.setTimestamp(Instant.now());
+        eb.setColor(Color.red)
+                .setAuthor(properties.getProperty("title"))
+                .setTitle(Title)
+                .setDescription(Description)
+                .setTimestamp(Instant.now());
         return eb;
+    }
+
+    private static EmbedBuilder MakeAnnounceEmbedBuilder(String Title, String Description, String Announcement) {
+        var eb = MakeSimpleEmbedBuilder(Title, Description);
+        if (Announcement.isEmpty())
+            return eb;
+        else
+            return eb.setDescription(String.format("%s\n\nGlobal announcement:\n%s", Description, Announcement));
     }
 
     public static int getServerCount() {
@@ -265,6 +274,7 @@ public class Bot extends ListenerAdapter {
 
             String message;
             IMentionable user;
+            ResultSet resultSet_listcommand = null;
             long day = 0, hour = 0, min = 0;
             switch (CommandName) {
                 case "ping": //핑
@@ -370,9 +380,16 @@ public class Bot extends ListenerAdapter {
                     }
                     break;
                 case "list": //알람 목록 출력.
-                    ResultSet resultSet_listcommand;
                     try {
                         resultSet_listcommand = BotSQL.ReadSchedulesById(event.getGuild().getId(), event.getMessageChannel().getId(), event.getUser().getId());
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                    // Do not break;
+                case "listall":
+                    try {
+                        if (resultSet_listcommand == null)
+                            resultSet_listcommand = BotSQL.ReadSchedulesById(event.getGuild().getId());
                         StringBuilder query = new StringBuilder();
                         int count = 0;
                         Pair<String, String> datePair;
@@ -502,6 +519,11 @@ public class Bot extends ListenerAdapter {
             bundle.setRepeatTime(0);
             bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
             bundle.setCode(BotSQL.MakeNewCode(properties.getProperty("randomcode")));
+            if (AlarmTime <= System.currentTimeMillis())
+            {
+                v.editOriginalEmbeds(MakeSimpleEmbedBuilder("New Alarm - Error", "Date and time must be future.").build()).queue();
+                return false;
+            }
             if (BotSQL.WriteSchedule(bundle)) {
                 Pair<Integer, Integer> timezone = BotSQL.ReadTimezoneById(bundle.ClientId, null);
                 v.editOriginalEmbeds(
@@ -553,6 +575,7 @@ public class Bot extends ListenerAdapter {
         else
             return user.getPermissions();
     }
+
 
     private static void DoAlarm(String GuildId, String MessageChannelId, String Message, String To) { //시간이 된 알람 울리기
         Guild guild = jda.getGuildById(GuildId);
