@@ -40,23 +40,42 @@ public class Bot extends ListenerAdapter {
         properties = new Properties();
         FileInputStream is = new FileInputStream("src/config/config.properties");
         properties.load(is);
-        if (args.length == 0) {
+        if (args.length == 0) { //args 없음, 토큰 수동으로 입력
             System.out.print("TOKEN(NORMAL): ");
             TOKEN = Files.readAllLines(Path.of("../TOKEN")).get(0);
             manualPath = getProperty("manualPathNormal");
-            System.out.println("[main] NORMAL RUN");
+            System.out.println(String.format("%s\n[main] NORMAL RUN", TOKEN));
             Init(false);
-        } else if (args[0].equals("-t")) {
+        } else if (args[0].equals("-t")) { //테스트 설정으로 실행
             TOKEN = args[1];
             manualPath = getProperty("manualPathTest");
             System.out.println("[main] TEST RUN");
             Init(true);
-        } else if (args[0].equals("-n")) {
+        } else if (args[0].equals("-n")) { //통상 설정으로 실행
             TOKEN = args[1];
             manualPath = getProperty("manualPathNormal");
             System.out.println(String.format("[main] NORMAL RUN by TOKEN %s", args[1]));
             Init(false);
         }
+
+        Scanner scanner = new Scanner(System.in);
+        String input = scanner.nextLine().toLowerCase(Locale.ROOT);
+        while (!input.equals("exit"))
+        {
+            switch (input)
+            {
+                case "ping":
+                    System.out.println("[main] pong");
+                    break;
+                default:
+                    System.out.println(input);
+            }
+
+            input = scanner.nextLine().toLowerCase(Locale.ROOT);
+        }
+        System.out.println("[main] Shutting down");
+        jda.shutdownNow();
+        return;
     }
 
     public static void Init(boolean isTestRun) throws LoginException, InterruptedException {
@@ -583,7 +602,7 @@ public class Bot extends ListenerAdapter {
         if (guild != null) messageChannel = guild.getTextChannelById(MessageChannelId);
         else return;
         if (messageChannel != null)
-            messageChannel.sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s\n%s", To, Message)).build()).queue();
+            messageChannel.sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s\nto %s", Message, To)).build()).queue();
     }
 
 }

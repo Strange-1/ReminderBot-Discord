@@ -18,7 +18,8 @@ public class SqlScheduleBundle {
         ACTIVE,
         CANCELLED,
         COMPLETED,
-        TEST
+        TEST,
+        ANNOUNCEMENT
     }
 
     public void setId(long id) {
