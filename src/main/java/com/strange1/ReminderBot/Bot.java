@@ -57,23 +57,6 @@ public class Bot extends ListenerAdapter {
             System.out.println(String.format("[main] NORMAL RUN by TOKEN %s", args[1]));
             Init(false);
         }
-
-        Scanner scanner = new Scanner(System.in);
-        String input = scanner.nextLine().toLowerCase(Locale.ROOT);
-        while (!input.equals("exit")) {
-            switch (input) {
-                case "ping":
-                    System.out.println("[main] pong");
-                    break;
-                default:
-                    System.out.println(input);
-            }
-
-            input = scanner.nextLine().toLowerCase(Locale.ROOT);
-        }
-        System.out.println("[main] Shutting down");
-        jda.shutdownNow();
-        return;
     }
 
     public static void Init(boolean isTestRun) throws LoginException, InterruptedException {
