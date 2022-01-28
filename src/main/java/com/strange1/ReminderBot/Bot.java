@@ -60,10 +60,8 @@ public class Bot extends ListenerAdapter {
 
         Scanner scanner = new Scanner(System.in);
         String input = scanner.nextLine().toLowerCase(Locale.ROOT);
-        while (!input.equals("exit"))
-        {
-            switch (input)
-            {
+        while (!input.equals("exit")) {
+            switch (input) {
                 case "ping":
                     System.out.println("[main] pong");
                     break;
@@ -538,8 +536,7 @@ public class Bot extends ListenerAdapter {
             bundle.setRepeatTime(0);
             bundle.setStatus(SqlScheduleBundle.StatusId.ACTIVE);
             bundle.setCode(BotSQL.MakeNewCode(properties.getProperty("randomcode")));
-            if (AlarmTime <= System.currentTimeMillis())
-            {
+            if (AlarmTime <= System.currentTimeMillis()) {
                 v.editOriginalEmbeds(MakeSimpleEmbedBuilder("New Alarm - Error", "Date and time must be future.").build()).queue();
                 return false;
             }
@@ -601,8 +598,10 @@ public class Bot extends ListenerAdapter {
         TextChannel messageChannel;
         if (guild != null) messageChannel = guild.getTextChannelById(MessageChannelId);
         else return;
-        if (messageChannel != null)
-            messageChannel.sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s\nto %s", Message, To)).build()).queue();
+        if (messageChannel != null) {
+            messageChannel.sendMessage(To).queue();
+            messageChannel.sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s", Message)).build()).queue();
+        }
     }
 
 }
