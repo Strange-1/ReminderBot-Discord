@@ -582,8 +582,7 @@ public class Bot extends ListenerAdapter {
         if (guild != null) messageChannel = guild.getTextChannelById(MessageChannelId);
         else return;
         if (messageChannel != null) {
-            messageChannel.sendMessage(To).queue();
-            messageChannel.sendMessage(MakeSimpleEmbedBuilder("Alarm!", String.format("%s", Message)).build()).queue();
+            messageChannel.sendMessage(String.format("%s %s", To, Message)).queue();
         }
     }
 
